@@ -3,55 +3,10 @@
 #include <string.h>
 
 #include "quickjs/quickjs.h"
+#include "quickjs/quickjs-libc.h"
 
-#define PROMPT "> "
-#define MAX_BUF_SIZE ((1 << 16) - 1)
-
-int jsnprintf(char *buf, size_t size, JSContext *context, JSValue *value) {
-  assert(value != NULL);
-
-  size_t ret = 0;
-  if (JS_IsBool(*value)) {
-    int b = JS_ToBool(context, *value);
-    ret = snprintf(buf, size, "%s", b == 1 ? "true" : "false");
-  } else if (JS_IsNumber(*value)) {
-    int64_t i;
-    JS_ToInt64(context, &i, *value);
-    ret = snprintf(buf, size, "%li", i);
-  } else if (JS_IsUndefined(*value) || JS_IsUninitialized(*value)) {
-    ret = snprintf(buf, size, "undefined");
-  } else if (JS_IsNull(*value)) {
-    ret = snprintf(buf, size, "null");
-  } else if (JS_IsNumber(*value)) {
-    int64_t i;
-    JS_ToInt64(context, &i, *value);
-    ret = snprintf(buf, size, "%li", i);
-  } else if (JS_IsString(*value)) {
-    const char *s = JS_ToCString(context, *value);
-    ret = snprintf(buf, size, "%s", s);
-  } else if (JS_IsException(*value)) {
-    JSValue exception = JS_GetException(context);
-    JSValue name = JS_GetPropertyStr(context, exception, "name");
-    if (!JS_IsUndefined(name)) {
-      const char *s = JS_ToCString(context, name);
-      ret = snprintf(buf, size, "[exception] %s: ", s);
-    }
-    JSValue message = JS_GetPropertyStr(context, exception, "message");
-    if (!JS_IsUndefined(message)) {
-      const char *s = JS_ToCString(context, message);
-      ret += snprintf(&buf[ret], size - ret, "%s", s);
-    }
-    JS_FreeValue(context, message);
-    JS_FreeValue(context, name);
-    JS_FreeValue(context, exception);
-  } else if (JS_IsObject(*value)) {
-    ret = 0; // TODO
-  } else {
-    return -1;
-  }
-
-  return ret;
-}
+extern const uint8_t qjsc_repl[];
+extern const uint32_t qjsc_repl_size;
 
 int add(int lhs, int rhs) {
   return lhs + rhs;
@@ -68,34 +23,25 @@ JSValue j_add(JSContext *context, JSValueConst this_val, int argc, JSValueConst 
 
 int main(int argc, char **argv) {
   JSRuntime *runtime = JS_NewRuntime();
+  js_std_init_handlers(runtime);
+
   JSContext *context = JS_NewContext(runtime);
+  js_init_module_std(context, "std");
+  js_init_module_os(context, "os");
+
+  JS_SetModuleLoaderFunc(runtime, NULL, js_module_loader, NULL);
 
   // Let's plug add to the global object
   JSValue global_obj = JS_GetGlobalObject(context);
   JS_SetPropertyStr(context, global_obj, "add",
                     JS_NewCFunction(context, j_add, "add", 0));
 
-  printf("ctrl-D to quit\n");
-  char *input = NULL;
-  while (1) {
-    printf("%s", PROMPT);
-    scanf("%m[^\n]", &input);
-    if (input == NULL) { // EOF
-      break;
-    }
-    getchar(); // consume the new line character
-    JSValue ret = JS_Eval(context, input, strnlen(input, MAX_BUF_SIZE), "<eval>", 0);
-    free(input);
-    char result[MAX_BUF_SIZE];
-    if (jsnprintf(result, MAX_BUF_SIZE, context, &ret) > 0) {
-      printf("%s\n", result);
-    } else {
-      printf("Unknown result type: %li\n", ret.tag);
-    }
-  }
+  js_std_eval_binary(context, qjsc_repl, qjsc_repl_size, 0);
+  js_std_loop(context);
 
+  JS_FreeValue(context, global_obj);
+  js_std_free_handlers(runtime);
   JS_FreeContext(context);
   JS_FreeRuntime(runtime);
-  printf("OK\n");
   return 0;
 }

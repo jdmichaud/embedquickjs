@@ -22,16 +22,26 @@ re: clean all
 
 HEADERS = $(wildcard *.h)
 
-SRCS = main.c
+# These are for the "std" version of quickjs, where the qjs repl is reused.
+SRCS = main.c quickjs/repl.c
 OBJS = $(patsubst %.c,%.o,$(SRCS))
+
+# These are for the bare bone version of quickjs
+SRCS_BAREBONE = main-barebone.c
+OBJS_BAREBONE = $(patsubst %.c,%.o,$(SRCS_BAREBONE))
 
 %: %.c
 	$(CC) $(CFLAGS)  -o $@ $<
 
 $(OBJS): quickjs
 
+$(OBJSS): quickjs
+
 $(TARGET): $(LIB_QUICKJS) $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OBJS) $(LIBS)
+
+# $(TARGET): $(LIB_QUICKJS) $(OBJS_BAREBONE)
+# 	$(CC) -o $@ $(LDFLAGS) $(OBJS_BAREBONE) $(LIBS)
 
 quickjs:
 	git clone https://github.com/bellard/quickjs
