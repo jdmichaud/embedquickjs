@@ -36,6 +36,8 @@ int main(int argc, char **argv) {
   JS_SetPropertyStr(context, global_obj, "add",
                     JS_NewCFunction(context, j_add, "add", 0));
 
+  char *_argv[0];
+  js_std_add_helpers(context, 0, _argv);
   js_std_eval_binary(context, qjsc_repl, qjsc_repl_size, 0);
   js_std_loop(context);
 
